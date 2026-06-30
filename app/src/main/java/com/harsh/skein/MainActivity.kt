@@ -22,8 +22,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,6 +32,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.harsh.skein.ui.theme.SkeinTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,7 +53,6 @@ class MainActivity : ComponentActivity() {
 fun SmsPermissionScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
-    // 1. State: do we currently have READ_SMS? Checked once when the screen first appears.
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -61,20 +62,31 @@ fun SmsPermissionScreen(modifier: Modifier = Modifier) {
         )
     }
 
-    // 2. Launcher: shows the system "Allow?" dialog and reports the result back.
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        // results is a Map<String, Boolean>: each permission -> was it granted?
         hasPermission = results[Manifest.permission.READ_SMS] == true
     }
+    var messages by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
 
-    // 3. UI: status text + a button that fires the request.
     Column(modifier = modifier.padding(16.dp)) {
-        Text(
-            text = if (hasPermission) "SMS permission: GRANTED ✅"
-            else "SMS permission: NOT granted ❌"
-        )
+        if (hasPermission) {
+            LaunchedEffect(Unit) {
+                messages = withContext(Dispatchers.IO) {
+                    readSmsMessages(context)
+                }
+            }
+
+            LazyColumn {
+                items(messages) { message ->
+                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        Text(message.displayName)
+                        Text(message.body)
+                    }
+                }
+            }
+        } else Text("SMS permission: NOT granted ❌")
+
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = {
             permissionLauncher.launch(
@@ -86,36 +98,25 @@ fun SmsPermissionScreen(modifier: Modifier = Modifier) {
         }) {
             Text("Request permissions")
         }
-        var messages by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
 
-        Button(enabled = hasPermission,
-            onClick = { messages= readSmsMessages(context) }) {
-            Text("get messages")
-        }
-        LazyColumn {
-            items(messages) { message ->
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                    Text(message.displayName)
-                    Text(message.body)
-                }
-            }
-        }
+//        Button(enabled = hasPermission,
+//            onClick = { messages = readSmsMessages(context) }) {
+//            Text("get messages")
+//        }
     }
 }
 
 data class SmsMessage(
-    val sender: String,        // raw number from the SMS store
+    val sender: String,
     val body: String,
     val date: Long,
-    val displayName: String    // contact name if known, else the number
+    val displayName: String
 )
 
-// Reduce any phone number to a comparable form: digits only, last 10.
-// "+91 98765-43210" and "9876543210" both become "9876543210".
+// Digits only, last 10 — so differently formatted numbers still match.
 fun normalizeNumber(number: String): String =
     number.filter { it.isDigit() }.takeLast(10)
 
-// Read all contacts once, returning a map: normalizedNumber -> contactName.
 fun readContacts(context: Context): Map<String, String> {
     val names = mutableMapOf<String, String>()
 
@@ -131,7 +132,8 @@ fun readContacts(context: Context): Map<String, String> {
         null,
         null
     )?.use { c ->
-        val nameColumn = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+        val nameColumn =
+            c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
         val numberColumn = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
 
         while (c.moveToNext()) {
@@ -143,40 +145,34 @@ fun readContacts(context: Context): Map<String, String> {
 
     return names
 }
+
 fun readSmsMessages(context: Context): List<SmsMessage> {
     val messages = mutableListOf<SmsMessage>()
-
-    // Build the number -> name lookup once, up front.
     val contactNames = readContacts(context)
 
-    // Which columns we want — like SELECT address, body, date
     val projection = arrayOf(
         Telephony.Sms.ADDRESS,
         Telephony.Sms.BODY,
         Telephony.Sms.DATE
     )
 
-    // Run the query against the system SMS table, newest first.
     val cursor = context.contentResolver.query(
-        Telephony.Sms.CONTENT_URI,    // FROM  (the system SMS table)
-        projection,                   // SELECT columns
-        null,                         // WHERE — none for now
-        null,                         // WHERE arguments — none
-        Telephony.Sms.DATE + " DESC"  // ORDER BY date, newest first
+        Telephony.Sms.CONTENT_URI,
+        projection,
+        null,
+        null,
+        Telephony.Sms.DATE + " DESC"
     )
 
-    // use { } auto-closes the cursor when we're done (even if something throws).
     cursor?.use { c ->
         val senderColumn = c.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
         val bodyColumn = c.getColumnIndexOrThrow(Telephony.Sms.BODY)
         val dateColumn = c.getColumnIndexOrThrow(Telephony.Sms.DATE)
 
-        // Walk each row of the result.
         while (c.moveToNext()) {
             val sender = c.getString(senderColumn) ?: "Unknown"
             val body = c.getString(bodyColumn) ?: ""
             val date = c.getLong(dateColumn)
-            // Look up the name; fall back to the raw number if not a contact.
             val displayName = contactNames[normalizeNumber(sender)] ?: sender
             messages.add(SmsMessage(sender, body, date, displayName))
         }
