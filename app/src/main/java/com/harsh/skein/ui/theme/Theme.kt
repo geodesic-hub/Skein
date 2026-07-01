@@ -1,58 +1,92 @@
 package com.harsh.skein.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+// Skein's own theme tokens (things Material's colorScheme doesn't have a slot for).
+data class SkeinColors(
+    val bg: Color,
+    val surface: Color,
+    val header: Color,
+    val accent: Color,
+    val bubbleOut: Color,
+    val onBubbleOut: Color,
+    val text: Color,
+    val sub: Color,
+    val line: Color
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val PeachyLight = SkeinColors(
+    bg = PeachBgLight,
+    surface = PeachSurfaceLight,
+    header = PeachHeaderLight,
+    accent = PeachAccent,
+    bubbleOut = PeachBubbleOutLight,
+    onBubbleOut = PeachOnBubbleOutLight,
+    text = PeachTextLight,
+    sub = PeachSubLight,
+    line = PeachLineLight
 )
+
+private val PeachyDark = SkeinColors(
+    bg = PeachBgDark,
+    surface = PeachSurfaceDark,
+    header = PeachHeaderDark,
+    accent = PeachAccent,
+    bubbleOut = PeachBubbleOutDark,
+    onBubbleOut = PeachOnBubbleOutDark,
+    text = PeachTextDark,
+    sub = PeachSubDark,
+    line = PeachLineDark
+)
+
+// The channel that carries our tokens down the whole UI tree.
+val LocalSkeinColors = staticCompositionLocalOf { PeachyLight }
 
 @Composable
 fun SkeinTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
+    val skein = if (darkTheme) PeachyDark else PeachyLight
 
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    // Map our tokens onto Material's standard slots too, so built-in
+    // components (Text default color, etc.) also follow the theme.
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary = skein.accent,
+            onPrimary = Color.White,
+            background = skein.bg,
+            onBackground = skein.text,
+            surface = skein.surface,
+            onSurface = skein.text,
+            surfaceVariant = skein.header,
+            onSurfaceVariant = skein.sub
+        )
+    } else {
+        lightColorScheme(
+            primary = skein.accent,
+            onPrimary = Color.White,
+            background = skein.bg,
+            onBackground = skein.text,
+            surface = skein.surface,
+            onSurface = skein.text,
+            surfaceVariant = skein.header,
+            onSurfaceVariant = skein.sub
+        )
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalSkeinColors provides skein) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

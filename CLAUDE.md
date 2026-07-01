@@ -50,4 +50,4 @@ I test on a real Android phone, not the emulator (the point is my actual texts).
 
 ## Current status
 <!-- Update this line as we progress. -->
-Phase 0 in progress. Done: blank Compose app runs on device (Moto Razr 2025); READ_SMS declared in manifest + runtime permission request working (button + state-driven status). Next: query the SMS content provider and display real messages.
+Phase 0 essentially complete. Done: runs on device (Moto Razr 2025); runtime READ_SMS + READ_CONTACTS permissions; reads SMS off the main thread (LaunchedEffect + Dispatchers.IO); resolves contact names; groups messages by system thread_id into conversations; tap-to-open thread view (state-based navigation, no nav library yet); custom teal/coral Material theme (dynamic color off); timestamps + sent/received bubble styling. Next: Phase 1 (become default SMS app) OR refactor state into a ViewModel first (see [[skein-architecture-direction]]).

@@ -40,3 +40,6 @@ keystore.properties
 .DS_Store
 *.log
 hs_err_pid*
+
+# Design handoff reference (not part of the app)
+design_handoff_peachy_messages/
